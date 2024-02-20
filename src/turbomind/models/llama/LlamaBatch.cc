@@ -244,9 +244,12 @@ void LlamaBatch<T>::ProcessInferRequests(const Requests& requests)
         state.sequences[idx] = r->start_flag ? sequence_manager_->Create(r->id) : sequence_manager_->Get(r->id);
         FT_CHECK(state.sequences[idx]);
 
+        std::cout << "kebao: [ProcessInferRequests] start_flag: " << r->start_flag << " seq: " << *state.sequences[idx] << std::endl;
+
         auto& seq = *state.sequences[idx];
 
         if (int step = r->inputs[rank_].getVal<int>("step", -1); step >= 0) {
+            std::cout << "kebao: [ProcessInferRequests] step: " << step << " token_size: " << seq.tokens.size() << std::endl;
             if (step <= seq.tokens.size()) {
                 seq.tokens.resize(step);
                 seq.cache_len = std::min(seq.cache_len, step);
@@ -261,9 +264,13 @@ void LlamaBatch<T>::ProcessInferRequests(const Requests& requests)
         const int  input_length = r->inputs[rank_].getVal<int>("input_lengths");
         const int* input_ids    = r->inputs[rank_].getPtr<int>("input_ids");
 
+        std::cout << "kebao: [ProcessInferRequests] input_length: " << input_length << " input_ids: " << *input_ids << std::endl;
+
         // `output_ids` contains all token ids of the sequences
         const auto output_ids_base = state.output_ids + session_len_ * idx;
         auto       output_ids      = output_ids_base;
+
+        std::cout << "kebao: [ProcessInferRequests] session_len_: " << session_len_ << " state.output_ids: " << state.output_ids << std::endl;
 
         // copy history tokens
         if (!seq.tokens.empty()) {
@@ -280,6 +287,8 @@ void LlamaBatch<T>::ProcessInferRequests(const Requests& requests)
             const auto range_tensor = r->inputs[rank_].at("input_embedding_ranges");
             const auto emb_tensor   = r->inputs[rank_].at("input_embeddings");
             const int* ranges       = range_tensor.getPtr<int>();
+
+            std::cout << "kebao: [ProcessInferRequests] range_tensor shape: " << range_tensor.shape << " emb_tensor shape: " << emb_tensor.shape << std::endl;
 
             auto check_embeddings = [&](int& num_valid_embeddings) {
                 if (range_tensor.shape.size() != 3 || range_tensor.shape[2] % 2 != 0) {
@@ -335,6 +344,8 @@ void LlamaBatch<T>::ProcessInferRequests(const Requests& requests)
 
         const int request_output_len = state.requests[idx]->inputs[rank_].getVal<int>("request_output_len");
         state.seq_len_limit[idx]     = state.h_context_length[idx] + request_output_len;
+
+        std::cout << "kebao: [ProcessInferRequests] h_prompt_length: " << state.h_prompt_length[idx] << " h_context_length: " << state.h_context_length[idx] << " seq_len_limit: " << state.seq_len_limit[idx] << std::endl;
         // `length_criterion` sets finish flag when step >= seq_limit_len, however when step == seq_limit_len
         // the actual sequence length is seq_limit_len + 1, hence seq_limit_len must truncated to session_len - 1
         if (state.seq_len_limit[idx] >= session_len_) {
@@ -381,6 +392,8 @@ void LlamaBatch<T>::ProcessInferRequests(const Requests& requests)
             }
         }
         state.h_rope_theta[idx] = seq.rope_theta;
+
+        std::cout << "kebao: [ProcessInferRequests] h_rope_theta: " << state.h_rope_theta[idx] << std::endl;
 
         if (r->start_flag) {
             // prepare to initialize random state for new sequence
@@ -434,6 +447,7 @@ void LlamaBatch<T>::AdjustMaxInputCount(GenerationState&                    g,
     input_count -= batch_size;
 
     // min tokens per iter for satisfying max prefill iters constraint
+    // 实际上在当前设定下，max_prefill_iters就是1，即prefill在一轮iter中就需要完成
     input_count = (input_count + max_prefill_iters_ - 1) / max_prefill_iters_;
 
     if (g.min_input_count.empty()) {
@@ -448,6 +462,9 @@ void LlamaBatch<T>::AdjustMaxInputCount(GenerationState&                    g,
 
     input_count = std::max(g.min_input_count.front() + batch_size, num_tokens_per_iter_);
     input_count = std::min(input_count, max_context_token_num_);
+
+    std::cout << "kebao: [AdjustMaxInputCount] max_context_token_num_: " << max_context_token_num_ << " num_tokens_per_iter_: " << num_tokens_per_iter_  << " input_count: " << extra_tokens_per_iter_ << std::endl;
+    
     // update max input count
     g.max_input_count1 = input_count;
     g.max_input_count2 = std::min(input_count + extra_tokens_per_iter_, max_context_token_num_);
@@ -475,6 +492,8 @@ void LlamaBatch<T>::Initialize(GenerationState& g)
             }
         }
     }
+    // std::cout << "kebao: [Initialize] holes: " << holes << " active_holes: " << active_holes << " state_: " << *state_ << std::endl;
+    // std::cout << "kebao: [Initialize] incoming_: " << *incoming_ << std::endl;
 
     auto process = [&](BatchState* state) {
         for (int i = 0; i < state->size; ++i) {
@@ -489,10 +508,11 @@ void LlamaBatch<T>::Initialize(GenerationState& g)
     };
 
     process(state_);
-    process(incoming_);
+    process(incoming_); // 这里将state_里面的sequence和incomming_里的合并起来了，incomming是这一轮iter新加入的
 
     auto adjust = [this, &g](const Sequences&        sequences,
                              const std::vector<int>& context_length) -> std::pair<int, int> {
+        // 限制max_input_count，可能是为了避免一个iter推理时间过长，太长的prifill会把一个iter时间拉得太长
         AdjustMaxInputCount(g, sequences, context_length);
         return {g.max_input_count1, g.max_input_count2};
     };
@@ -509,6 +529,8 @@ void LlamaBatch<T>::Initialize(GenerationState& g)
     std::vector<int> idxs(sequences.size());
     std::iota(idxs.begin(), idxs.end(), 0);
 
+    // std::cout << "kebao: [Initialize] cache_len: " << sequences[0]->cache_len << " input_length: " << sequences[0]->input_length  << " context_length: " << context_lengths[0] << std::endl;
+
     if (exchange || holes || incoming_->size) {
         // put active ones first
         auto active_end = std::stable_partition(idxs.begin(), idxs.end(), [&](int idx) {
@@ -521,11 +543,13 @@ void LlamaBatch<T>::Initialize(GenerationState& g)
         }
 
         // move the partial seq to the back
+        // 这里指的partial指的是在Materialize中分配资源时input被截断的Seq，并不是因为资源不足，而是max_input_count1的限制，partial只可能是Active的最后一个
         auto partial_beg = std::stable_partition(idxs.begin(), active_end, [&](int i) {
             return sequences[i]->cache_len + sequences[i]->input_length == context_lengths[i];
         });
         FT_CHECK(active_end - partial_beg <= 1);
 
+        // 将上一轮iter中就已经是active的放到前面
         auto swapin_beg = std::stable_partition(idxs.begin(), partial_beg, [&](int i) {
             return status[i] == Sequence::kActive;  // past status
         });
@@ -589,6 +613,7 @@ void LlamaBatch<T>::Initialize(GenerationState& g)
 
         static_assert(sizeof(uintptr_t) == sizeof(void*));
 
+        // 将host数据copy到device
         Copy(h_cu_block_counts_, batch_size + 1, cu_block_counts_);
         Copy(h_k_block_ptrs_, h_cu_block_counts_[batch_size], k_block_ptrs_);
         Copy(h_v_block_ptrs_, h_cu_block_counts_[batch_size], v_block_ptrs_);
@@ -647,6 +672,9 @@ void LlamaBatch<T>::Initialize(GenerationState& g)
         g.step             = max_context_len;
         InitializeSampling(g);
     }
+
+    std::cout << "kebao: [Initialize] skip_init_sampling: " << skip_init_sampling 
+    << " GenerationState: " << g << std::endl;
 }
 
 template<typename T>
@@ -693,6 +721,7 @@ void LlamaBatch<T>::CopyState(const std::vector<std::tuple<BatchState*, BatchSta
             d_idx.push_back(std::get<3>(desc[idxs[i]]));
         }
 
+        // ??
         IndexedCopy(s_idx,
                     d_idx,
                     std::tuple{s->output_ids, d->output_ids, session_len_},
@@ -1024,7 +1053,7 @@ void LlamaBatch<T>::InitializeSampling(const GenerationState& g)
     // ABCDEFGHi    ->  ABCDEFGHi i
     // ABCDEFGh         ABCDEFGh  h
     // ABCd             ABCd      d
-    invokePadLastTokenIds(token_ids_buf_, init_context_length_, g.max_init_ctx_len, batch_size, stream_);
+    invokePadLastTokenIds(token_ids_buf_, init_context_length_, g.max_init_ctx_len, batch_size, stream_); // 为什么要pad last token?
     sync_check_cuda_error();
 
     // seq_limit_len_, will be compared to `step` instead of `sequence_length`, so padding len should be accounted for
@@ -1272,6 +1301,8 @@ auto LlamaBatch<T>::Interrupt(int index, bool force_stop, bool force_end) -> Sig
         TM_LOG_INFO("[Interrupt] slot %d, tokens [%s]", index, ss.str().c_str());
     }
 
+    std::cout << "kebao: [Interrupt] index: " << index << " force_stop " << force_stop << " force_end " << force_end << " end_flag " << state_->requests[index]->end_flag << " sequence_status " << state_->sequences[index]->status << std::endl;
+
     if (state_->requests[index]->end_flag || force_end) {
         // Sequence is ending this round or a stop request is issued to end it
         FT_CHECK(sequence_manager_->Erase(state_->requests[index]->id));
@@ -1323,12 +1354,14 @@ void LlamaBatch<T>::InternalThreadEntry(int device_id)
 
     while (1) {
         if (rank_ == 0) {
+            // device 0进行一些管理控制
             const int  free_slot_count = max_batch_size_ - state_->size + g.finished_count;
             const bool is_empty        = (free_slot_count == max_batch_size_);
             stop_requests.clear();
             infer_requests.clear();
             if (is_empty || request_counter % request_interval == 0) {
                 // Block if batch is empty
+                // 每次从queue里把requests都捞出来，放到stop_requests和infer_requests
                 request_queue.dequeue(stop_requests, infer_requests, free_slot_count, is_empty, shared_state->abort);
                 if (!shared_state->abort) {
                     RejectInvalidRequests(stop_requests, infer_requests);
@@ -1465,6 +1498,7 @@ bool LlamaBatch<T>::Forward(GenerationState& g, int iter)
             FT_CHECK(seq.input_length >= 1);
             h_input_length_buf_[i] = seq.input_length;
             input_d_ptrs[i]        = state_->output_ids + i * session_len_ + seq.cache_len;
+            std::cout << "kebao: [Forward] input_length: " << seq.input_length << " pf_offset: " << pf_offset << std::endl;
             if (seq.input_length > 1 && pf_offset < 0) {
                 pf_offset = i;
             }
@@ -1480,6 +1514,7 @@ bool LlamaBatch<T>::Forward(GenerationState& g, int iter)
         }
         pf_offset = active_size;
     }
+    // std::cout << "kebao: [Forward] iter: " << iter << " active_size: " << active_size << " session_len_ " << session_len_ << " pf_offset: " << pf_offset << std::endl;
 
     // These buffers are only accessed when there are prefill workloads
     if (pf_offset != active_size) {
@@ -1496,9 +1531,10 @@ bool LlamaBatch<T>::Forward(GenerationState& g, int iter)
     std::vector<int> max_context_cnts;
     // initialize first mini-batch with decode tokens
     int accum_size        = pf_offset;
-    int accum_token_count = pf_offset;
+    int accum_token_count = pf_offset; // 因为pf_offset前面的request的input_len都是1
     int max_context_count = 0;
     for (int i = pf_offset; i < active_size; ++i) {
+        // 仅对prefill进行处理
         FT_CHECK(iter == 0);
         int size          = accum_size + 1;
         int input_count   = accum_token_count + h_input_length_buf_[i];
@@ -1509,28 +1545,39 @@ bool LlamaBatch<T>::Forward(GenerationState& g, int iter)
         // prefill kernels are expecting uniform k/v cache length -> `max_context_count * size <=
         // max_context_token_num_`
         if (input_count <= max_context_token_num_ && context_count * pf_size <= max_context_token_num_) {
+            // 对于当前seq满足这个条件，即保证了前面这几个组成的minibatch是满足`max_context_count * size <=max_context_token_num_`这一条件的
+            // 第一个minibatch会和前面decode的组成一起，第一个条件是防止前面decode的input就已经超过最大context长度了
             accum_size        = size;
             accum_token_count = input_count;
             max_context_count = context_count;
         }
         else {
+            // 组下一个prefill的batch
             offsets.push_back(i);
             max_context_cnts.push_back(max_context_count);
             accum_size        = 1;
             accum_token_count = h_input_length_buf_[i];
-            max_context_count = state_->h_context_length[i];
+            max_context_count = state_->h_context_length[i]; // max_context_count只是针对minibatch而言，一个minibatch需要长度统一
         }
+        std::cout << "kebao: [Forward] i: " << i << " size: " << size << " input_count: " << input_count
+        << " context_count: " << context_count << " pf_size: " << pf_size << " max_context_token_num_: " << max_context_token_num_ << std::endl;
     }
     offsets.push_back(active_size);
     max_context_cnts.push_back(max_context_count);
 
-    // forward on mini-batches
+    std::cout << "kebao: [Forward] offsets: [";
+    for (auto& x : offsets) {
+        std::cout << x << " ";
+    }
+    std::cout << "]" << std::endl;
+
+    // forward on mini-batches，各个mini_batch顺序执行
     for (int p = 0; p < (int)offsets.size() - 1; ++p) {
         int  first           = offsets[p];
         int  last            = offsets[p + 1];
         int  mini_batch_size = last - first;
-        T*   k_ptr           = tmp_k_cache_buf_;
-        T*   v_ptr           = tmp_v_cache_buf_;
+        T*   k_ptr           = tmp_k_cache_buf_;  // 用于临时存储kv cache的buffer，其长度最大也只有sizeof(T) * max_context_token_num_ * local_kv_head_num * head_dim
+        T*   v_ptr           = tmp_v_cache_buf_;  // 因此一个minibatch的kv cache不允许超过这么多，如果一个prefill请求非常大，那么它只能单独一个minibatch了
         int  max_input_len{};
         auto input_ids = context_decoder_ids_buf_;
         //
@@ -1541,16 +1588,17 @@ bool LlamaBatch<T>::Forward(GenerationState& g, int iter)
 
         BatchedCopy batched_copy;
         for (int i = first; i < last; ++i) {
+            // 将input_id copy到device中的context_decoder_ids_buf_中
             input_ids = batched_copy.Add(input_d_ptrs[i], h_input_length_buf_[i], input_ids);
             dbg(i, h_input_length_buf_[i]);
             // allocate tmp k/v buffer for pre-fill sequences
-            if (i < pf_offset) {
+            if (i < pf_offset) { // decode的不需要
                 h_tmp_k_ptrs_[i] = h_tmp_v_ptrs_[i] = nullptr;
             }
             else {
                 h_tmp_k_ptrs_[i] = k_ptr;
                 h_tmp_v_ptrs_[i] = v_ptr;
-                k_ptr += model_->local_kv_head_num_ * max_context_cnts[p] * model_->size_per_head_;
+                k_ptr += model_->local_kv_head_num_ * max_context_cnts[p] * model_->size_per_head_; // 递增ptr用来存储下一个prefill seq的kv cache
                 v_ptr += model_->local_kv_head_num_ * max_context_cnts[p] * model_->size_per_head_;
             }
             decode_indices.push_back(i);
@@ -1558,15 +1606,15 @@ bool LlamaBatch<T>::Forward(GenerationState& g, int iter)
             sequences.push_back(state_->sequences[i]);
             max_input_len = std::max(max_input_len, h_input_length_buf_[i]);
         }
-        int token_count = input_ids - context_decoder_ids_buf_;
+        int token_count = input_ids - context_decoder_ids_buf_;  // 这个minibatch总共的input token数量
 
-        batched_copy.Submit(stream_);
+        batched_copy.Submit(stream_);  // 实际执行batch copy，用cuda kernel来做
 
         Copy(h_tmp_k_ptrs_ + first, mini_batch_size, tmp_k_ptrs_ + first);
         Copy(h_tmp_v_ptrs_ + first, mini_batch_size, tmp_v_ptrs_ + first);
 
-        const int dc_batch_size = p ? 0 : pf_offset;
-        const int pf_batch_size = mini_batch_size - dc_batch_size;
+        const int dc_batch_size = p ? 0 : pf_offset;  // pf_offset前面都是做decode的
+        const int pf_batch_size = mini_batch_size - dc_batch_size; // 后面是做prefill的
 
         if (rank_ == 0) {
             if (pf_batch_size) {
@@ -1581,6 +1629,7 @@ bool LlamaBatch<T>::Forward(GenerationState& g, int iter)
             }
         }
 
+        // 一个minibatch的forward，里面可能既有decode，也有prefill
         model_->forwardUnified(decoder_output_buf_ + first * model_->hidden_units_,
                                context_decoder_output_buf_,  // temp
                                context_decoder_input_buf_,   // temp

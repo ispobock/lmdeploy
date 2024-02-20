@@ -243,6 +243,8 @@ std::unique_ptr<LlamaTritonSharedModelInstance<T>> LlamaTritonModel<T>::createSh
     std::shared_ptr<ft::AbstractCustomComm>                           custom_all_reduce_comm)
 {
     ft::check_cuda_error(cudaSetDevice(device_id));
+
+    // rank是由device_id定义的，后面所有rank==0执行的语句都是第0块gpu执行的
     const int comms_rank = device_id % (tensor_para_size_ * pipeline_para_size_);
 
     std::unique_ptr<ft::Allocator<ft::AllocatorType::CUDA>> allocator(

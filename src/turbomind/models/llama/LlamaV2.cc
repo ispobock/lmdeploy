@@ -436,6 +436,7 @@ void LlamaV2<T>::forward(std::unordered_map<std::string, Tensor>*       outputs,
     std::vector<std::shared_ptr<Request>> requests(batch_size);
 
     // rank-0 allocates all requests for the batch
+    // 每个device一个线程，只有rank=0的线程被分配做这个初始化requests的事情，其他的等着取即可
     if (rank == 0) {
         for (int i = 0; i < batch_size; ++i) {
             requests[i] = std::make_shared<Request>();

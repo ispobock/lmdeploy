@@ -65,6 +65,7 @@ BlockManager::BlockManager(
 
 BlockManager::~BlockManager()
 {
+    std::cout << "kebao: [~BlockManager] free chunks" << std::endl;
     for (auto& chunk : chunks_) {
         allocator_->free(&chunk);
     }

@@ -303,6 +303,16 @@ private:
     static int  parseNpyHeader(FILE*& f_ptr, uint32_t header_len, DataType& type, std::vector<size_t>& shape);
 };
 
+template <typename T>
+std::ostream& operator<< (std::ostream& out, const std::vector<T>& v) {
+    out << '[';
+    for (auto& x:v) {
+        out << x << ", ";
+    }
+    out << "]";
+    return out;
+}
+
 class TensorMap {
 private:
     std::unordered_map<std::string, Tensor> tensor_map_;

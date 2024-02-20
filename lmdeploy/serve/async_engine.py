@@ -240,6 +240,7 @@ class AsyncEngine:
         try:
             yield
         except (Exception, asyncio.CancelledError) as e:  # noqa
+            # stream api ctrl+C后会进入这里
             self.stop_session(session_id)
             raise e
         if str(session_id) in self.id2generator:

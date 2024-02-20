@@ -40,6 +40,13 @@ struct BatchState {
     int size;
 };
 
+inline std::ostream& operator<<(std::ostream& os, const BatchState& bs)
+{
+    os << "sequences_size=" << bs.sequences.size() << ", requests_size=" << bs.requests.size() 
+       << ", active_size=" << bs.active_size << ", size=" << bs.size;
+    return os;
+}
+
 template<typename T>
 class LlamaV2;
 
@@ -62,6 +69,16 @@ struct GenerationState {
 
     int finished_count;
 };
+
+inline std::ostream& operator<<(std::ostream& os, const GenerationState& gs)
+{
+    os << "max_init_ctx_len=" << gs.max_init_ctx_len << ", step=" << gs.step
+       << ", sum_seq_len=" << gs.sum_seq_len << ", max_seq_len=" << gs.max_seq_len
+       << ", partial=" << gs.partial << ", partial_context_legnth=" << gs.partial_context_legnth
+       << ", max_input_count1=" << gs.max_input_count1 << ", max_input_count2=" << gs.max_input_count2
+       << ", finished_count=" << gs.finished_count << ", unique_id_count=" << gs.unique_ids.size();
+    return os;
+}
 
 template<typename T>
 class LlamaBatch {

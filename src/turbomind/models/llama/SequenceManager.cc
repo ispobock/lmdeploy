@@ -273,6 +273,7 @@ struct Transaction {
         schedule_.block_counts.push_back(block_count_);
 
         if (input_count_ > schedule_.input_count2) {
+            // 这里对input做了个截断，可能会造成partial
             input_count_ = schedule_.input_count1;
         }
         schedule_.input_count1 -= input_count_;
@@ -390,6 +391,7 @@ auto SequenceManager::Materialize(Sequences                    sequences,
 
     // `schedule.last` is decreasing in the loop
     for (int i = 0; i < schedule.last; ++i) {
+        // sequence的input_length是在这里计算出来的，context_length是在Forward Finish里面更新的，即h_context_length
         const int input_length = context_lengths[i] - sequences[i]->cache_len;
         Transaction{sequences, i, required[i], input_length, schedule}.Process();
     }

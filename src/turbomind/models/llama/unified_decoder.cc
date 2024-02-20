@@ -169,6 +169,7 @@ void UnifiedDecoder<T>::forward(TensorMap* outputs, const TensorMap* inputs, con
         FT_CHECK(tmp_token_num == token_num - dc_batch_size);
 
         if (need_causal_mask_) {
+            // LlamaV2使用了FMHA，所以不使用mask
             invokeCreateCausalMasks(attention_mask_,
                                     input_length + pf_offset,
                                     context_length + pf_offset,

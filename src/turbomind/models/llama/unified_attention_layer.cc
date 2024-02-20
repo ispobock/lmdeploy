@@ -329,6 +329,7 @@ void UnifiedAttentionLayer<T>::prefill(T*                output,
     const int kv_cache_elem_bits = quant_policy_ & QuantPolicy::kCacheKVInt8 ? 8 : sizeof(T) * 8;
 
     FT_CHECK(weights->past_kv_scale.size() == 4);
+    // 为什么要ConvertKvCacheBlocksToLiner?
     ConvertKvCacheBlocksToLinear2((const void**)k_cache_ptrs,
                                   (const void**)v_cache_ptrs,
                                   (T**)tmp_k_ptrs,

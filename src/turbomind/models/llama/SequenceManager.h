@@ -46,7 +46,7 @@ using Sequences = std::vector<const Sequence*>;
 
 inline std::ostream& operator<<(std::ostream& os, const Sequence& seq)
 {
-    os << "id=" << seq.id << ", status=" << seq.status << ", token_count=" << seq.tokens.size()
+    os << "id=" << seq.id << ", status=" << seq.status << ", token_count=" << seq.tokens.size() << ", input_length=" << seq.input_length
        << ", block_count=" << seq.blocks.size() << ", cache_len=" << seq.cache_len
        << ", random_state_size=" << seq.random_state.size();
     return os;
