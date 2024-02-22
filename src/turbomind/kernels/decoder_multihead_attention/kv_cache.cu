@@ -51,7 +51,7 @@ __inline__ __device__ void ConvertBlockSize(const Tin** __restrict__ src_block_p
     int dst_block_index  = si / dst_block_len + dst_cu_block_cnts[bi];
     int dst_block_offset = dst_offset + hi * dst_block_len * head_dim + si % dst_block_len * head_dim + di;
 
-    // printf("%d %d\n", src_block_index, dst_block_index);
+    // printf("kebao: [ConvertBlockSize] src_block_index: %d src_block_offset: %d dst_block_index: %d dst_block_offset: %d\n", src_block_index, src_block_offset, dst_block_index, dst_block_offset);
 
     const Tin* __restrict__ src_block = src_block_ptrs[src_block_index];
     Tout* __restrict__ dst_block      = dst_block_ptrs[dst_block_index];

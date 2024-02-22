@@ -496,7 +496,9 @@ class TurboMindInstance:
             model_insts[device_id] = model_inst
 
     def _forward_callback(self, result, ctx):
-        self.que.put((False, result))
+        print("kebao: call back function")
+        print(_tm_dict_to_torch_dict(result))
+        self.que.put((False, result))  # 这里每次传回的其实是Forward结束后的output_ids，即context，包含历史和新生成的token，所以只要拿最后一个就行了
 
     def _forward_thread(self, inputs):
         instance_comm = self.tm_model.model_comm.create_instance_comm(

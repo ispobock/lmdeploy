@@ -223,12 +223,14 @@ class AsyncEngine:
 
     def stop_session(self, session_id: int):
         """Stop a session by a session_id."""
+        print("kebao: call stop session")
         if str(session_id) in self.id2generator:
             self.id2generator[str(session_id)].cancel(session_id)
             self.gens_set.add(self.id2generator[str(session_id)])
 
     def end_session(self, session_id: int):
         """Clear a session by a session_id."""
+        print("kebao: call end session")
         if str(session_id) in self.id2generator:
             self.id2generator[str(session_id)].end(session_id)
             self.id2step[str(session_id)] = 0
@@ -241,6 +243,7 @@ class AsyncEngine:
             yield
         except (Exception, asyncio.CancelledError) as e:  # noqa
             # stream api ctrl+C后会进入这里
+            print("kebao: call stop session for safe run")
             self.stop_session(session_id)
             raise e
         if str(session_id) in self.id2generator:

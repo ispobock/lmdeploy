@@ -207,6 +207,12 @@ void DynamicDecodeLayer<T>::forward(TensorMap* output_tensors, TensorMap* input_
     const int step = input_tensors->at("step").getVal<int>();
     FT_CHECK(input_tensors->at("logits").shape.size() == 3);
 
+    std::cout<<"kebao: [DynamicSampling] logits shape: [";
+    for (auto& s: input_tensors->at("logits").shape) {
+        std::cout << s << " "; 
+    }
+    std::cout<<"]"<<std::endl;
+
     const size_t batch_size       = input_tensors->at("logits").shape[0];
     const size_t beam_width       = input_tensors->at("logits").shape[1];
     const size_t local_batch_size = (size_t)input_tensors->at("local_batch_size").getVal<int>();
