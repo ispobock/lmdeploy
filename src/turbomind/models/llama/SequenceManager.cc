@@ -381,6 +381,9 @@ auto SequenceManager::Materialize(Sequences                    sequences,
     // the blocks can still be preempted later
     VerifyAndLockCached(sequences);
 
+    // prefix cache
+
+
     auto [input_count1, input_count2] = adjust(sequences, context_lengths);
 
     std::vector<int> required = CountRequiredBlocks(sequences, context_lengths, step_length);
