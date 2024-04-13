@@ -1264,12 +1264,26 @@ auto LlamaBatch<T>::Interrupt(int index, bool force_stop, bool force_end) -> Sig
     }
 
     if (state_->requests[index]->end_flag || force_end) {
+        // session end
         // Sequence is ending this round or a stop request is issued to end it
+        if (sequence_manager_->cached_blocks_ids.empty()) {
+            auto& seq = *state_->sequences[index];
+            sequence_manager_->cached_blocks_ids.push_back(seq.blocks[0]);
+            // sequence_manager_->cached_blocks_ids.push_back(seq.blocks[1]);
+            // sequence_manager_->cached_blocks_ids.push_back(seq.blocks[2]);
+            sequence_manager_->cached_block_unique_ids.push_back(seq.block_unique_ids[0]);
+            // sequence_manager_->cached_block_unique_ids.push_back(seq.block_unique_ids[1]);
+            // sequence_manager_->cached_block_unique_ids.push_back(seq.block_unique_ids[2]);
+        }
+
         FT_CHECK(sequence_manager_->Erase(state_->requests[index]->id));
     }
     else {
         const int output_len = state_->h_context_length[index];
         auto&     seq        = *state_->sequences[index];
+
+        // sequence_manager_->cached_blocks_ids.push_back(seq.blocks[0]);
+        // sequence_manager_->cached_block_unique_ids.push_back(seq.block_unique_ids[0]);
 
         // Update token IDs
         seq.tokens.resize(output_len);
@@ -1282,7 +1296,7 @@ auto LlamaBatch<T>::Interrupt(int index, bool force_stop, bool force_end) -> Sig
         Copy(state_->curand_state + index, 1, (curandState_t*)seq.random_state.data());
 
         // Set unlock flag for corresponding blocks, will be unlocked in the next `Materialize()`
-        sequence_manager_->UpdateAndSetUnlock(seq);
+        sequence_manager_->UpdateAndSetUnlock(seq); // 没有结束的多轮对话sequence会被置为cache状态
     }
 
     state_->sequences[index] = nullptr;

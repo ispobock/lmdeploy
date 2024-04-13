@@ -19,8 +19,8 @@ struct Sequence {
     uint64_t id;
     Status   status = kCached;
 
-    BlockIds  blocks;
-    UniqueIds block_unique_ids;
+    mutable BlockIds  blocks;
+    mutable UniqueIds block_unique_ids;
 
     int input_length = 0;
 
@@ -106,6 +106,9 @@ public:
     {
         return block_manager_->max_block_count();
     }
+
+    BlockIds cached_block_unique_ids;
+    BlockIds cached_blocks_ids;
 
 private:
     void Erase(std::map<uint64_t, Sequence>::iterator& it);

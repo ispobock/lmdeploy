@@ -10,6 +10,8 @@
 #include <ctime>
 #include <numeric>
 #include <stdexcept>
+#include <iostream>
+#include <vector>
 
 namespace turbomind {
 
@@ -72,7 +74,7 @@ void SequenceManager::Erase(std::map<uint64_t, Sequence>::iterator& it)
     else {
         UpdateAndSetUnlock(seq);
     }
-    freed_.insert(freed_.end(), seq.blocks.begin(), seq.blocks.end());
+    freed_.insert(freed_.end(), seq.blocks.begin()+3, seq.blocks.end());
     it = sequences_.erase(it);
 }
 
@@ -91,6 +93,7 @@ void SequenceManager::VerifyAndLockCached(const Sequences& sequences)
     for (const auto& p : sequences) {
         auto& seq = const_cast<Sequence&>(*p);
         if (seq.status != Sequence::kCached) {
+            // 还在进行decoding
             continue;
         }
         FT_CHECK(seq.blocks.size() == seq.block_unique_ids.size());
@@ -100,7 +103,7 @@ void SequenceManager::VerifyAndLockCached(const Sequences& sequences)
         seq.block_unique_ids.resize(count);
 
         blocks.insert(blocks.end(), seq.blocks.begin(), seq.blocks.end());
-        seq.cache_len = std::min<int>(seq.cache_len, seq.blocks.size() * block_seq_len_);
+        seq.cache_len = std::min<int>(seq.cache_len, seq.blocks.size() * block_seq_len_); // 如果block被抢占，这里会调整cache_len让block重算
         seq.status    = Sequence::kLocked;
     }
     block_manager_->Lock(blocks);
@@ -124,7 +127,8 @@ void SequenceManager::UpdateAndSetUnlock(const Sequence& sequence)
     FT_CHECK(sequence.status != Sequence::kCached);
     auto& seq = const_cast<Sequence&>(sequence);
     block_manager_->Touch(seq.blocks);
-    unlocked_.insert(unlocked_.end(), seq.blocks.begin(), seq.blocks.end());
+    unlocked_.insert(unlocked_.end(), seq.blocks.begin()+3, seq.blocks.end());
+    // unlocked_.insert(unlocked_.end(), seq.blocks.begin(), seq.blocks.end());
     seq.status = Sequence::kCached;
 }
 
@@ -382,7 +386,31 @@ auto SequenceManager::Materialize(Sequences                    sequences,
     VerifyAndLockCached(sequences);
 
     // prefix cache
+    if (cached_blocks_ids.size() > 0) {
+        for (int i = 0; i < sequences.size(); i++) {
+            if (sequences[i]->blocks.size() == 0) {
+                // sequences[i]->blocks.push_back(cached_blocks_ids[0]);
+                // sequences[i]->blocks.push_back(cached_blocks_ids[1]);
+                // sequences[i]->blocks.push_back(cached_blocks_ids[2]);
+                // sequences[i]->block_unique_ids.push_back(cached_block_unique_ids[0]);
+                // sequences[i]->block_unique_ids.push_back(cached_block_unique_ids[1]);
+                // sequences[i]->block_unique_ids.push_back(cached_block_unique_ids[2]);
+                // sequences[i]->cache_len += 192;
 
+                // std::cout << "reusing block: " << cached_blocks_ids[0] << " and " << cached_blocks_ids[1] << ", unique_id: " << cached_block_unique_ids[0] << " and " << cached_block_unique_ids[1] << std::endl;
+                // sequences[i]->blocks.push_back(cached_blocks_ids[0]);
+                // sequences[i]->blocks.push_back(cached_blocks_ids[1]);
+                // sequences[i]->block_unique_ids.push_back(cached_block_unique_ids[0]);
+                // sequences[i]->block_unique_ids.push_back(cached_block_unique_ids[1]);
+                // sequences[i]->cache_len += 128;
+
+                std::cout << "reusing block: " << cached_blocks_ids[0] << ", unique_id: " << cached_block_unique_ids[0] << std::endl;
+                sequences[i]->blocks.push_back(cached_blocks_ids[0]);
+                sequences[i]->block_unique_ids.push_back(cached_block_unique_ids[0]);
+                sequences[i]->cache_len += 64;
+            }
+        }
+    }
 
     auto [input_count1, input_count2] = adjust(sequences, context_lengths);
 
@@ -394,6 +422,7 @@ auto SequenceManager::Materialize(Sequences                    sequences,
     // `schedule.last` is decreasing in the loop
     for (int i = 0; i < schedule.last; ++i) {
         const int input_length = context_lengths[i] - sequences[i]->cache_len;
+        std::cout << "input_length:" << input_length << std::endl;
         Transaction{sequences, i, required[i], input_length, schedule}.Process();
     }
 

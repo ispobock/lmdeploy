@@ -13,48 +13,55 @@ from tqdm import tqdm
 from lmdeploy.serve.openai.api_client import APIClient
 from lmdeploy.tokenizer import Tokenizer
 
+PREFIX = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure that your responses are socially unbiased and positive in nature.
+If a question does not make any sense, or is not factually coherent, explain why instead of answering something not correct. If you don't know the answer to a question, please don't share false information.
+Please note that I am not a human, but a machine learning model. I am here to assist you with your questions, but I cannot provide personal advice or engage in discussions that may be inappropriate or harmful. If you have any further questions or concerns, please feel free to ask.\n\nPlease keep in mind that I am a machine and do not have personal opinions or beliefs.
+"""
+
 
 def sample_requests(
     dataset_path: str,
     num_requests: int,
     tokenizer: Tokenizer,
 ) -> List[Tuple[str, int, int]]:
-    # Load the dataset.
-    with open(dataset_path) as f:
-        dataset = json.load(f)
-    # Filter out the conversations with less than 2 turns.
-    dataset = [data for data in dataset if len(data['conversations']) >= 2]
-    # Only keep the first two turns of each conversation.
-    dataset = [(data['conversations'][0]['value'],
-                data['conversations'][1]['value']) for data in dataset]
+    # # Load the dataset.
+    # with open(dataset_path) as f:
+    #     dataset = json.load(f)
+    # # Filter out the conversations with less than 2 turns.
+    # dataset = [data for data in dataset if len(data['conversations']) >= 2]
+    # # Only keep the first two turns of each conversation.
+    # dataset = [(data['conversations'][0]['value'],
+    #             data['conversations'][1]['value']) for data in dataset]
 
-    # pre-sample to avoid go through all the dataset
-    dataset = random.sample(dataset, max(int(num_requests * 1.2), 1000))
+    # # pre-sample to avoid go through all the dataset
+    # dataset = random.sample(dataset, max(int(num_requests * 1.2), 1000))
 
-    # Tokenize the prompts and completions.
-    prompts = [prompt for prompt, _ in dataset]
-    prompt_token_ids = tokenizer(prompts).input_ids
-    completions = [completion for _, completion in dataset]
-    completion_token_ids = tokenizer(completions).input_ids
-    tokenized_dataset = []
-    for i in range(len(dataset)):
-        output_len = len(completion_token_ids[i])
-        tokenized_dataset.append((prompts[i], prompt_token_ids[i], output_len))
+    # # Tokenize the prompts and completions.
+    # prompts = [prompt for prompt, _ in dataset]
+    # prompt_token_ids = tokenizer(prompts).input_ids
+    # completions = [completion for _, completion in dataset]
+    # completion_token_ids = tokenizer(completions).input_ids
+    # tokenized_dataset = []
+    # for i in range(len(dataset)):
+    #     output_len = len(completion_token_ids[i])
+    #     tokenized_dataset.append((prompts[i], prompt_token_ids[i], output_len))
 
-    # Filter out too long sequences.
-    filtered_dataset: List[Tuple[str, int, int]] = []
-    for prompt, prompt_token_ids, output_len in tokenized_dataset:
-        prompt_len = len(prompt_token_ids)
-        if prompt_len < 4 or output_len < 4:
-            # Prune too short sequences.
-            continue
-        if prompt_len > 1024 or prompt_len + output_len > 2048:
-            # Prune too long sequences.
-            continue
-        filtered_dataset.append((prompt, prompt_len, output_len))
+    # # Filter out too long sequences.
+    # filtered_dataset: List[Tuple[str, int, int]] = []
+    # for prompt, prompt_token_ids, output_len in tokenized_dataset:
+    #     prompt_len = len(prompt_token_ids)
+    #     if prompt_len < 4 or output_len < 4:
+    #         # Prune too short sequences.
+    #         continue
+    #     if prompt_len > 1024 or prompt_len + output_len > 2048:
+    #         # Prune too long sequences.
+    #         continue
+    #     filtered_dataset.append((prompt, prompt_len, output_len))
 
-    # Sample the requests.
-    sampled_requests = random.sample(filtered_dataset, num_requests)
+    # # Sample the requests.
+    # sampled_requests = random.sample(filtered_dataset, num_requests)
+
+    sampled_requests = [(PREFIX, 200, 100) for i in range(num_requests)]
     return sampled_requests
 
 
@@ -96,6 +103,7 @@ class Engine:
                     stream=stream_output,
                     session_id=session_id,
                     ignore_eos=True):
+                print(output)
                 timestamps.append(time.perf_counter())
 
             first_token_latency = np.round(timestamps[1] - timestamps[0], 3)
@@ -210,7 +218,7 @@ def main(server_addr: str,
          concurrency: int = 128,
          num_prompts: int = 5000,
          top_p: float = 1.0,
-         temperature: float = 1.0,
+         temperature: float = 0,
          stream_output: bool = False,
          csv: str = './profile_api_server.csv',
          seed: int = 0):
