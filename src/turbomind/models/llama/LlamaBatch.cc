@@ -258,6 +258,7 @@ void LlamaBatch<T>::ProcessInferRequests(const Requests& requests)
             }
         }
 
+        const int history_length = seq.tokens.size();
         const int  input_length = r->inputs[rank_].getVal<int>("input_lengths");
         const int* input_ids    = r->inputs[rank_].getPtr<int>("input_ids");
 
@@ -266,14 +267,25 @@ void LlamaBatch<T>::ProcessInferRequests(const Requests& requests)
         auto       output_ids      = output_ids_base;
 
         // copy history tokens
-        if (!seq.tokens.empty()) {
-            output_ids = Copy(seq.tokens.data(), seq.tokens.size(), output_ids);
+        if (history_length) {
+            output_ids = Copy(seq.tokens.data(), history_length, output_ids);
         }
 
         // copy input tokens
         if (input_length) {
             output_ids = Copy(input_ids, input_length, output_ids);
+
+            // update tokens in sequence
+            seq.tokens.resize(history_length+input_length);
+            std::copy_n(input_ids, input_length, &seq.tokens[history_length]);
         }
+
+        // std::cout << "input_length: " << input_length << std::endl;
+        // std::cout << "tokens: ";
+        // for (int i = 0; i < seq.tokens.size(); i++) {
+        //     std::cout << seq.tokens[i] << ", ";
+        // }
+        // std::cout << std::endl;
 
         // copy input embeddings
         if (r->inputs[rank_].isExist("input_embedding_ranges")) {
@@ -1282,8 +1294,8 @@ auto LlamaBatch<T>::Interrupt(int index, bool force_stop, bool force_end) -> Sig
         const int output_len = state_->h_context_length[index];
         auto&     seq        = *state_->sequences[index];
 
-        // sequence_manager_->cached_blocks_ids.push_back(seq.blocks[0]);
-        // sequence_manager_->cached_block_unique_ids.push_back(seq.block_unique_ids[0]);
+        sequence_manager_->cached_blocks_ids.push_back(seq.blocks[0]);
+        sequence_manager_->cached_block_unique_ids.push_back(seq.block_unique_ids[0]);
 
         // Update token IDs
         seq.tokens.resize(output_len);
@@ -1296,7 +1308,7 @@ auto LlamaBatch<T>::Interrupt(int index, bool force_stop, bool force_end) -> Sig
         Copy(state_->curand_state + index, 1, (curandState_t*)seq.random_state.data());
 
         // Set unlock flag for corresponding blocks, will be unlocked in the next `Materialize()`
-        sequence_manager_->UpdateAndSetUnlock(seq); // 没有结束的多轮对话sequence会被置为cache状态
+        // sequence_manager_->UpdateAndSetUnlock(seq); // 没有结束的多轮对话sequence会被置为cache状态
     }
 
     state_->sequences[index] = nullptr;
